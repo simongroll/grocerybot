@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Groceries</title>
+<style>
+  :root { --bg:#efeae2; --head:#008069; --me:#d9fdd3; --them:#fff; --ink:#111b21; --sub:#667781; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.35 -apple-system, system-ui, sans-serif; background:#d1d7db; color:var(--ink); }
+  .app { max-width:480px; height:100dvh; margin:0 auto; display:flex; flex-direction:column; background:var(--bg); }
+  header { background:var(--head); color:#fff; padding:10px 14px; display:flex; align-items:center; gap:10px; }
+  header .av { width:38px; height:38px; border-radius:50%; background:#dfe5e7; display:grid; place-items:center; font-size:20px; }
+  header b { display:block; } header small { opacity:.8; }
+  header select { margin-left:auto; border:0; border-radius:6px; padding:4px; }
+  #log { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+  .msg { max-width:80%; padding:6px 9px 4px; border-radius:8px; box-shadow:0 1px .5px rgba(0,0,0,.13); white-space:pre-wrap; word-wrap:break-word; }
+  .msg.me { align-self:flex-end; background:var(--me); }
+  .msg.them { align-self:flex-start; background:var(--them); }
+  .msg .who { font-size:12.5px; font-weight:600; color:#1f7aec; }
+  .msg .who.bot { color:#c4459a; }
+  .msg time { display:block; text-align:right; font-size:11px; color:var(--sub); }
+  .typing { align-self:flex-start; color:var(--sub); font-style:italic; font-size:13px; padding:2px 4px; }
+  form { display:flex; gap:8px; padding:8px; background:#f0f2f5; }
+  form textarea { flex:1; resize:none; border:0; border-radius:20px; padding:10px 14px; font:inherit; height:42px; }
+  form button { width:42px; height:42px; border:0; border-radius:50%; background:var(--head); color:#fff; font-size:18px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="av">🛒</div>
+    <div><b>Groceries</b><small>you, grocerybot</small></div>
+    <select id="sender" title="Send as"><option>Alex</option><option>Sam</option></select>
+  </header>
+  <div id="log"></div>
+  <form id="f">
+    <textarea id="t" placeholder="Message" autofocus></textarea>
+    <button>➤</button>
+  </form>
+</div>
+<script>
+const CHAT = "family";
+const log = document.getElementById("log"), t = document.getElementById("t"), who = document.getElementById("sender");
+let last = 0, waiting = 0, typingEl = null;
+
+function render(m) {
+  const mine = m.sender === who.value;
+  const d = document.createElement("div");
+  d.className = "msg " + (mine ? "me" : "them");
+  if (!mine) {
+    const w = document.createElement("div");
+    w.className = "who" + (m.sender === "bot" ? " bot" : "");
+    w.textContent = m.sender === "bot" ? "grocerybot" : m.sender;
+    d.append(w);
+  }
+  // WhatsApp-style *bold*
+  const body = document.createElement("span");
+  body.innerHTML = m.body.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])).replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+  d.append(body);
+  const tm = document.createElement("time");
+  tm.textContent = new Date(m.ts * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  d.append(tm);
+  log.insertBefore(d, typingEl);
+}
+
+function setTyping(on) {
+  if (on && !typingEl) { typingEl = document.createElement("div"); typingEl.className = "typing"; typingEl.textContent = "grocerybot is typing…"; log.append(typingEl); }
+  if (!on && typingEl) { typingEl.remove(); typingEl = null; }
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`/api/messages?chat_id=${CHAT}&after=${last}`);
+    const msgs = await r.json();
+    for (const m of msgs) { render(m); last = m.id; if (m.sender === "bot") waiting = Math.max(0, waiting - 1); }
+    if (msgs.length) log.scrollTop = log.scrollHeight;
+  } catch (e) {}
+  setTyping(waiting > 0);
+  setTimeout(poll, 800);
+}
+
+document.getElementById("f").onsubmit = async e => {
+  e.preventDefault();
+  const text = t.value.trim(); if (!text) return;
+  t.value = "";
+  waiting = 1;
+  await fetch("/api/send", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chat_id: CHAT, sender: who.value, text})});
+};
+t.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("f").requestSubmit(); } });
+poll();
+</script>
+</body>
+</html>

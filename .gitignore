@@ -1,0 +1,15 @@
+# Secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+ngrok.env
+
+# Your database, Amazon browser profile (logged-in session) and exports
+data/
+*.csv
+amazon-session.json
+
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
